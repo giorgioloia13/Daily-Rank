@@ -28,7 +28,7 @@ button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(
 button.p{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:600}
 button:disabled{opacity:.5}
 .hero button{background:#ffffff30;color:#fff;border-color:#ffffff60}
-input[type=text],input[type=number],input[type=date],select{font:inherit;width:100%;padding:10px;border:1px solid var(--bd);border-radius:12px;background:var(--bg);color:var(--tx);margin-top:8px}
+input[type=text],input[type=number],input[type=date],input[type=password],select{font:inherit;width:100%;padding:10px;border:1px solid var(--bd);border-radius:12px;background:var(--bg);color:var(--tx);margin-top:8px}
 .days{display:flex;gap:4px;margin:10px 0;flex-wrap:wrap}
 .days label{border:1px solid var(--bd);border-radius:10px;padding:6px 10px;font-size:13px;cursor:pointer}
 .days input{display:none}.days input:checked+span{font-weight:800;color:var(--ac)}
@@ -54,7 +54,7 @@ nav button{border:0;background:none;display:flex;flex-direction:column;align-ite
 nav button span{font-size:24px;filter:grayscale(1);opacity:.6}
 nav button.on{color:var(--ac);font-weight:700}nav button.on span{filter:none;opacity:1}
 .avs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.avs button{font-size:26px;padding:6px 10px}.avs button.on{border-color:var(--ac);background:var(--bd)}
-</style></head><body><main>
+</style><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script></head><body><main>
 
 <section class="tab on" id="t-home">
 <div class="card hero"><div class="mut" id="hi"></div><div class="row"><div><div class="mut">XP di oggi</div><div class="big" id="score"></div></div><div style="text-align:right"><div class="mut">Streak</div><div class="big" id="streak"></div></div></div>
@@ -90,12 +90,14 @@ nav button.on{color:var(--ac);font-weight:700}nav button.on span{filter:none;opa
 <select id="theme"><option value="auto">Tema automatico</option><option value="light">Chiaro</option><option value="dark">Scuro</option></select>
 <div style="margin-top:12px"><button id="reset">Azzera tutti i dati</button></div><div class="mut" id="rmsg"></div></div>
 </section>
+<section class="tab" id="t-friends"><div class="card"><div id="fbox"></div></div></section>
 </main>
 
 <nav id="nav">
 <button data-t="home" class="on"><span>🏠</span>Oggi</button>
 <button data-t="add"><span>➕</span>Task</button>
 <button data-t="rank"><span>🏆</span>Rank</button>
+<button data-t="friends"><span>🤝</span>Amici</button>
 <button data-t="me"><span>🦊</span>Profilo</button>
 </nav>
 
@@ -125,6 +127,86 @@ function pop(r){var d=document.createElement("div");d.className="fxc";d.textCont
 function confetti(n){var C=["#6c5ce7","#00b894","#fdcb6e","#ff7675","#74b9ff"];for(var i=0;i<n;i++){var p=document.createElement("i");p.className="cf";p.style.left=Math.random()*100+"vw";p.style.background=C[i%5];p.style.setProperty("--dx",(Math.random()*160-80)+"px");p.style.animationDelay=Math.random()*.4+"s";p.style.animationDuration=(1.6+Math.random()*1.2)+"s";document.body.appendChild(p);(function(q){setTimeout(function(){q.remove()},3500)})(p)}}
 function toast(m){var d=document.createElement("div");d.className="toast";d.textContent=m;document.body.appendChild(d);setTimeout(function(){d.remove()},2600)}
 function cnt(el,to,suf){var from=el._v==null?to:el._v,tk=el._k=(el._k||0)+1;el._v=to;if(from===to){el.textContent=to+suf;return}var t0=performance.now();(function f(t){if(el._k!==tk)return;var q=Math.min(1,(t-t0)/600);el.textContent=Math.round(from+(to-from)*q)+suf;if(q<1)requestAnimationFrame(f)})(t0)}
+var SBU="https://gxczkojinnhnzysrgbnv.supabase.co",SBK="sb_publishable_OOukBIFdH1x12oltc3fWKg_4CmWGgAV";
+var sb=null;try{sb=window.supabase.createClient(SBU,SBK)}catch(e){}
+var F={user:null,me:null,list:[],reqs:[],msg:"",em:""},lastSync="",syncT=null,WK=0;
+function fmsg(m){F.msg=m;rf()}
+async function loadF(){
+ if(!sb||!F.user){rf();return}
+ try{
+  var pr=await sb.from("profiles").select("*").eq("id",F.user.id).maybeSingle();
+  F.me=pr.data||null;
+  if(F.me){
+   var fr=await sb.from("friendships").select("requester,addressee,status").eq("status","accepted");
+   var ids=(fr.data||[]).map(function(x){return x.requester===F.user.id?x.addressee:x.requester});
+   var ps=ids.length?await sb.from("profiles").select("*").in("id",ids):{data:[]};
+   F.list=ps.data||[];
+   var rq=await sb.rpc("my_requests");F.reqs=rq.data||[];
+  }
+ }catch(e){F.msg="Errore di rete. Riprova."}
+ rf();if(F.me)render()
+}
+async function authGo(mode){
+ var em=$("fem").value.trim(),pw=$("fpw").value;F.em=em;
+ if(!em||pw.length<6){fmsg("Inserisci email e una password di almeno 6 caratteri.");return}
+ var r=mode==="up"?await sb.auth.signUp({email:em,password:pw}):await sb.auth.signInWithPassword({email:em,password:pw});
+ if(r.error){fmsg(r.error.message);return}
+ if(!r.data.session){fmsg("Controlla la tua email per confermare l’account.");return}
+ F.user=r.data.user;F.msg="";loadF()
+}
+async function mkProfile(){
+ var u=$("fun").value.trim();
+ if(!/^[A-Za-z0-9_]{3,20}$/.test(u)){fmsg("Nome utente: da 3 a 20 caratteri tra lettere, numeri e _.");return}
+ var r=await sb.from("profiles").insert({id:F.user.id,username:u,avatar:S.av});
+ if(r.error){fmsg(r.error.code==="23505"?"Nome già preso, scegline un altro.":r.error.message);return}
+ F.msg="";lastSync="";loadF()
+}
+async function addF(){
+ var n=$("fsr").value.trim();if(!n)return;
+ var f=await sb.rpc("find_user",{name:n});
+ if(f.error||!f.data||!f.data.length){fmsg("Nessun utente trovato con quel nome.");return}
+ var t=f.data[0];if(t.id===F.user.id){fmsg("Quello sei tu!");return}
+ var inc=F.reqs.filter(function(q){return q.incoming&&q.username.toLowerCase()===t.username.toLowerCase()})[0];
+ if(inc){fAct("ok",inc.id);return}
+ var r=await sb.from("friendships").insert({requester:F.user.id,addressee:t.id});
+ if(r.error){fmsg(r.error.code==="23505"?"Richiesta già inviata o siete già amici.":r.error.message);return}
+ F.msg="Richiesta inviata a "+t.username+"!";loadF()
+}
+async function fAct(op,id){
+ var r=op==="ok"?await sb.from("friendships").update({status:"accepted"}).eq("id",id):await sb.from("friendships").delete().eq("id",id);
+ F.msg=r.error?r.error.message:"";loadF()
+}
+function sync(o){
+ if(!sb||!F.me||!F.user)return;var j=JSON.stringify(o);if(j===lastSync)return;
+ clearTimeout(syncT);syncT=setTimeout(async function(){var r=await sb.from("profiles").update(Object.assign({},o,{updated_at:new Date().toISOString()})).eq("id",F.user.id);if(!r.error)lastSync=j},1500)
+}
+function rf(){
+ var b=$("fbox");if(!b)return;
+ var m=F.msg?'<div class="err">'+esc(F.msg)+'</div>':"",h="";
+ if(!sb){h='<div class="mut">Servizio amici non disponibile.</div>'}
+ else if(!F.user){h='<h2>Accedi per sfidare i tuoi amici</h2><input type="text" id="fem" placeholder="Email" value="'+esc(F.em||"")+'"><input type="password" id="fpw" placeholder="Password (almeno 6 caratteri)">'+m+'<div class="row" style="margin-top:10px"><button class="p" data-f="in">Accedi</button><button data-f="up">Registrati</button></div><div class="mut" style="margin-top:8px">I tuoi task restano sul telefono: agli amici arrivano solo rank, XP e streak.</div>'}
+ else if(!F.me){h='<h2>Scegli il tuo nome utente</h2><input type="text" id="fun" maxlength="20" placeholder="Es. giorgio_97">'+m+'<div style="margin-top:10px"><button class="p" data-f="mk">Conferma</button></div><div class="mut" style="margin-top:8px">Gli amici ti cercheranno con questo nome.</div>'}
+ else{
+  var X=xp(),mm={username:F.me.username,avatar:S.av,xp:X,rank_idx:rankInfo(X).li,streak:streak(),week_score:WK,me:1};
+  var all=F.list.concat([mm]).sort(function(a,c){return c.week_score-a.week_score});
+  h='<div class="row"><h2 style="margin:0">Classifica della settimana</h2><button data-f="ref">↻</button></div><div style="margin-top:6px">';
+  all.forEach(function(p,i){var r=RANKS[Math.min(6,Math.max(0,p.rank_idx|0))];h+='<div class="task"><span class="mut" style="width:18px">'+(i+1)+'</span><span style="font-size:26px">'+esc(p.avatar||"🙂")+'</span><span class="n"><b>'+esc(p.username)+(p.me?" (tu)":"")+'</b><div class="mut"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+r[2]+'"></i> '+r[0]+' · '+p.streak+' 🔥 · '+p.xp+' XP</div></span><span class="pt">'+p.week_score+'</span></div>'});
+  if(!F.list.length)h+='<div class="mut" style="padding:8px 0">Nessun amico ancora: cercane uno qui sotto.</div>';
+  h+='</div>';
+  var inc=F.reqs.filter(function(q){return q.incoming}),outq=F.reqs.filter(function(q){return !q.incoming});
+  if(inc.length){h+='<h2 style="margin-top:14px">Richieste ricevute</h2>';inc.forEach(function(q){h+='<div class="task"><span class="n">'+esc(q.avatar||"🙂")+' '+esc(q.username)+'</span><button class="p" data-f="ok" data-id="'+q.id+'">Accetta</button><button data-f="no" data-id="'+q.id+'">×</button></div>'})}
+  if(outq.length){h+='<h2 style="margin-top:14px">In attesa di risposta</h2>';outq.forEach(function(q){h+='<div class="task"><span class="n">'+esc(q.avatar||"🙂")+' '+esc(q.username)+'</span><button data-f="no" data-id="'+q.id+'">Annulla</button></div>'})}
+  h+='<h2 style="margin-top:14px">Aggiungi un amico</h2><input type="text" id="fsr" placeholder="Nome utente dell’amico"><div style="margin-top:10px"><button class="p" data-f="add">Invia richiesta</button></div>'+m+'<div style="margin-top:14px"><button data-f="out">Esci ('+esc(F.user.email)+')</button></div>';
+ }
+ b.innerHTML=h
+}
+$("fbox").addEventListener("click",function(e){
+ var t=e.target.closest("button");if(!t)return;var f=t.dataset.f;
+ if(f==="in"||f==="up")authGo(f);else if(f==="mk")mkProfile();else if(f==="add")addF();else if(f==="ref")loadF();
+ else if(f==="out"){sb.auth.signOut().then(function(){F={user:null,me:null,list:[],reqs:[],msg:"",em:""};lastSync="";rf()})}
+ else if(f==="ok"||f==="no")fAct(f,t.dataset.id)
+});
+if(sb)sb.auth.getSession().then(function(r){if(r.data.session){F.user=r.data.session.user;loadF()}else rf()});else rf();
 function EM(i,c){var W='#ffffff80',E=[
 '<polygon points="0,-26 22.5,-13 22.5,13 0,26 -22.5,13 -22.5,-13" fill="'+c+'"/><circle r="9" fill="#2a2446"/><path d="M-22.5,-13 L0,-26 L22.5,-13" fill="none" stroke="'+W+'" stroke-width="3"/>',
 '<circle r="25" fill="'+c+'"/><circle r="18" fill="none" stroke="#00000050" stroke-width="3"/><polygon points="0,-11 2.6,-3.6 10.5,-3.4 4.2,1.4 6.5,8.9 0,4.5 -6.5,8.9 -4.2,1.4 -10.5,-3.4 -2.6,-3.6" fill="#ffffffb0"/>',
@@ -154,10 +236,10 @@ function render(){
  var rk="";RANKS.forEach(function(r,i){rk+='<div class="rk"><span class="dot" style="background:'+r[2]+(i>R.li?";opacity:.35":"")+'"></span><span class="n"'+(i===R.li?' style="font-weight:800"':"")+'>'+r[0]+'</span><span class="mut">'+r[1]+' XP</span></div>'});$("ranks").innerHTML=rk;
  $("avbig").textContent=S.av;$("mexp").textContent=R.c[0]+" · "+X+" XP";$("theme").value=S.theme;
  var av="";AV.forEach(function(a){av+='<button data-av="'+a+'"'+(a===S.av?' class="on"':"")+'>'+a+'</button>'});$("avs").innerHTML=av;
- document.querySelector('nav [data-t="me"] span').textContent=S.av;
+ document.querySelector('nav [data-t="me"] span').textContent=S.av;WK=tot;sync({avatar:S.av,xp:X,rank_idx:R.li,streak:streak(),week_score:tot});
  save();
 }
-$("nav").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("on")});$("t-"+b.dataset.t).classList.add("on");document.querySelectorAll("nav button").forEach(function(x){x.classList.toggle("on",x===b)});window.scrollTo(0,0)});
+$("nav").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("on")});$("t-"+b.dataset.t).classList.add("on");document.querySelectorAll("nav button").forEach(function(x){x.classList.toggle("on",x===b)});window.scrollTo(0,0);if(b.dataset.t==="friends")loadF()});
 var tg=function(e){var rc=e.target.getBoundingClientRect(),on=e.target.checked;var id=+e.target.dataset.id,k=dk(new Date()),a=S.done[k]||[],i=a.indexOf(id);if(e.target.checked&&i<0)a.push(id);if(!e.target.checked&&i>-1)a.splice(i,1);S.done[k]=a;render();if(on){pop(rc);var t2=dayTasks(new Date());if(t2.length&&t2.every(function(x){return (S.done[k]||[]).indexOf(x.id)>-1}))confetti(40)}};$("today").addEventListener("change",tg);$("done").addEventListener("change",tg);
 $("list").addEventListener("click",function(e){var id=e.target.dataset.del;if(id){S.tasks=S.tasks.filter(function(x){return x.id!=id});render()}});
 $("joker").addEventListener("click",function(){S.jokers[dk(new Date())]=true;render()});
